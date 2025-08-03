@@ -1,0 +1,256 @@
+<!-- All the styling is included here -->
+<style>
+  body {
+    font-family: 'Poppins', sans-serif;
+  }
+  .container {
+    background-color: #1a1a2e;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+    width: 100%;
+    max-width: 450px;
+    text-align: center;
+    margin: 40px auto;
+  }
+  h2 {
+    text-align: center;
+    margin-bottom: 25px;
+    color: #00f7ff;
+  }
+  label {
+    font-weight: 600;
+    display: block;
+    margin-top: 15px;
+    text-align: left;
+    color: #fff;
+  }
+  input, select, button {
+    width: 100%;
+    padding: 10px;
+    margin-top: 5px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    outline: none;
+    box-sizing: border-box;
+  }
+  input, select {
+    background-color: #16213e;
+    color: white;
+  }
+  button {
+    margin-top: 25px;
+    background-color: #00f7ff;
+    color: #000;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+  button:hover {
+    background-color: #00d1c2;
+  }
+  .developer {
+    text-align: center;
+    margin-top: 25px;
+    font-size: 14px;
+  }
+  .developer a {
+    color: #00f7ff;
+    font-weight: bold;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .form-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 30px;
+    gap: 10px;
+  }
+  .form-buttons button {
+    flex: 1;
+    padding: 8px;
+    font-size: 14px;
+    border-radius: 8px;
+    margin: 0;
+  }
+  #supportIcon {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    overflow: hidden;
+    cursor: pointer;
+    z-index: 1000;
+  }
+  #supportIcon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .loading {
+    display: none;
+    margin-top: 10px;
+    color: #00f7ff;
+  }
+  .closed-box {
+    padding: 20px;
+    background-color: #1a1a2e;
+    border-radius: 15px;
+    text-align: center;
+    font-size: 18px;
+    color: red;
+  }
+</style>
+
+<!-- The HTML for the form -->
+<div id="supportIcon" onclick="window.open('https://t.me/SMTM_Support_07', '_blank')">
+  <img src="https://i.ibb.co/LXpK3jnV/IMG-20250729-030421-104.jpg" alt="Support" />
+</div>
+<div class="container" id="mainContainer">
+  <h2 id="formHeading"></h2>
+  <form id="sheetForm" style="display: none;">
+    <label for="sheetLink">🔗 Sheet Link</label>
+    <input type="url" id="sheetLink" placeholder="Paste your sheet link" required="required" />
+    <label for="sheetPin">🔐 Sheet Pin</label>
+    <input type="text" id="sheetPin" placeholder="Enter your pin" required="required" />
+    <label for="paymentMethod">💳 Select Payment Method</label>
+    <select id="paymentMethod" required="required">
+      <option value="" disabled="disabled" selected="selected">Select Now</option>
+      <option value="Bkash">Bkash</option>
+      <option value="Nagad">Nagad</option>
+      <option value="Rocket">Rocket</option>
+      <option value="Binance">Binance</option>
+    </select>
+    <label for="paymentNumber">📱 Payment Number</label>
+    <input type="text" id="paymentNumber" placeholder="Enter your payment number" required="required" />
+    <label for="userId">🆔 Your ID Number</label>
+    <input type="text" id="userId" placeholder="Enter your ID number" required="required" />
+    <button type="submit">🚀 Send Now</button>
+    <div class="loading" id="loading">Processing...</div>
+  </form>
+  <div class="form-buttons">
+    <button onclick="switchPage('0fd')">0 FD Webmail</button>
+    <button onclick="switchPage('30fd')">30 FD Webmail</button>
+    <button onclick="switchPage('30fdmail')">30 FD Anymail</button>
+  </div>
+  <div class="developer">
+    Powered By <a href="https://t.me/FaceBook_Marketing_SMTM_07" target="_blank">SmTm</a>
+  </div>
+</div>
+
+<!-- All the JavaScript is included here -->
+<script>
+//<![CDATA[
+  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxJnTpXJtP2smMKMlRwaMBUhXbo8zCRDZTpCMG1NU_-7lRQtsq3mo5sPez0iMb4AGmvTg/exec';
+  const TELEGRAM_BOT_TOKEN = '8303484918:AAFSRfhHP223Jtby-e84D_9FRfZDs-RNYmk';
+  
+  const groups = {
+    '0fd': '-1002842859277',
+    '30fd': '-1002585569644',
+    '30fdmail': '-1002704750611'
+  };
+  
+  const openTimes = {
+    '0fd': [20, 22],
+    '30fd': [20, 23],
+    '30fdmail': [17, 18]
+  };
+  
+  const pageTitles = {
+    '0fd': '0 FD Webmail ID Submit',
+    '30fd': '30 FD Webmail ID Submit',
+    '30fdmail': '30 FD Anymail ID Submit'
+  };
+  
+  let currentPage = '0fd';
+  let closedBox = null;
+
+  function isPageOpen(page) {
+    const bdTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
+    const hour = bdTime.getHours();
+    const [start, end] = openTimes[page];
+    return hour >= start && hour < end;
+  }
+
+  function switchPage(page) {
+    currentPage = page;
+    const formattedDate = new Date().toLocaleDateString('en-GB');
+    document.getElementById('formHeading').textContent = `${formattedDate} - ${pageTitles[page]}`;
+    renderPage();
+  }
+
+  function renderPage() {
+    const container = document.getElementById('mainContainer');
+    const form = document.getElementById('sheetForm');
+    if (isPageOpen(currentPage)) {
+      form.style.display = 'block';
+      if (closedBox) {
+        closedBox.remove();
+        closedBox = null;
+      }
+    } else {
+      form.style.display = 'none';
+      if (!closedBox) {
+        closedBox = document.createElement('div');
+        closedBox.className = 'closed-box';
+        container.insertBefore(closedBox, container.querySelector('.form-buttons'));
+      }
+      const nextOpen = openTimes[currentPage][0];
+      closedBox.textContent = `এই পেজটি এখন বন্ধ আছে। পেজটি পুনরায় চালু হবে ${nextOpen} টায়।`;
+    }
+  }
+
+  document.getElementById('sheetForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const loading = document.getElementById('loading');
+    const submitButton = e.target.querySelector('button');
+    
+    loading.style.display = 'block';
+    submitButton.disabled = true;
+
+    const formData = {
+      sheetLink: document.getElementById('sheetLink').value,
+      sheetPin: document.getElementById('sheetPin').value,
+      paymentMethod: document.getElementById('paymentMethod').value,
+      paymentNumber: document.getElementById('paymentNumber').value,
+      userId: document.getElementById('userId').value,
+      submissionType: pageTitles[currentPage]
+    };
+
+    try {
+      // Step 1: Submit to Google Sheet
+      const sheetResponse = await fetch(WEB_APP_URL, {
+        method: 'POST',
+        redirect: "follow",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(formData),
+      });
+      if (!sheetResponse.ok) throw new Error('Failed to submit to sheet.');
+
+      // Step 2: Send Telegram notification
+      const formattedDate = new Date().toLocaleDateString('en-GB');
+      const message = `📝 <b>New Sheet Submission</b>\n\n📅 <b>Today date:</b> ${formattedDate}\n👉 <b>Open Sheet:</b> <a href="${formData.sheetLink}">Click Here</a>\n🔐 <b>Sheet Pin:</b> <code>${formData.sheetPin}</code>\n💳 <b>Payment Method:</b> ${formData.paymentMethod}\n📱 <b>Payment Number:</b> <code>${formData.paymentNumber}</code>\n🆔 <b>ID Number:</b> ${formData.userId}`;
+      const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${groups[currentPage]}&text=${encodeURIComponent(message)}&parse_mode=HTML`;
+      await fetch(telegramUrl);
+      
+      alert('✅ Submitted Successfully!');
+      document.getElementById('sheetForm').reset();
+
+    } catch (error) {
+      console.error('Submission Error:', error);
+      alert('❌ Submission Failed. Please try again.');
+    } finally {
+      loading.style.display = 'none';
+      submitButton.disabled = false;
+    }
+  });
+
+  // Initial page load
+  switchPage(currentPage);
+//]]>
+</script>
+<script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+<link href='https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&amp;display=swap' rel='stylesheet'/>
