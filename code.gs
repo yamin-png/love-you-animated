@@ -154,17 +154,28 @@ function runMergeProcess() {
             }
           }
 
-          // Add to payment data
+          // Add to payment data - count based on user submission
           const idCount = data.length > 1 ? data.length - 1 : 0; // Exclude header
           if (idCount > 0) {
-            paymentData.push({
-              method: paymentMethod,
-              number: paymentNumber,
-              totalId: idCount,
-              amount: 0, // Will be calculated later
-              userId: userId,
-              type: type
-            });
+            // Check if user already exists in payment data
+            const existingUserIndex = paymentData.findIndex(item => 
+              item.userId === userId && item.method === paymentMethod && item.number === paymentNumber
+            );
+            
+            if (existingUserIndex >= 0) {
+              // Update existing user's ID count
+              paymentData[existingUserIndex].totalId += idCount;
+            } else {
+              // Add new user entry
+              paymentData.push({
+                method: paymentMethod,
+                number: paymentNumber,
+                totalId: idCount,
+                amount: 0, // Will be calculated later
+                userId: userId,
+                type: type
+              });
+            }
           }
 
           totalProcessed++;
@@ -227,7 +238,7 @@ function createPaymentSheet(ss, currentDate, paymentData) {
   paymentSheet.clear();
   
   // Add headers
-  paymentSheet.getRange(1, 1, 1, 5).setValues([['Method', 'Number', 'Total Id', 'Amount', 'User ID']]);
+  paymentSheet.getRange(1, 1, 1, 6).setValues([['Method', 'Number', 'Total Id', 'Amount', 'User ID', 'Good IDs']]);
   
   // Add payment data
   if (paymentData.length > 0) {
@@ -236,14 +247,15 @@ function createPaymentSheet(ss, currentDate, paymentData) {
       item.number,
       item.totalId,
       item.amount,
-      item.userId
+      item.userId,
+      0 // Good IDs will be calculated later
     ]);
     
-    paymentSheet.getRange(2, 1, paymentRows.length, 5).setValues(paymentRows);
+    paymentSheet.getRange(2, 1, paymentRows.length, 6).setValues(paymentRows);
   }
   
   // Format headers
-  paymentSheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#4285f4').setFontColor('white');
+  paymentSheet.getRange(1, 1, 1, 6).setFontWeight('bold').setBackground('#4285f4').setFontColor('white');
 }
 
 function runReportAndUpdatePayment() {
@@ -372,8 +384,8 @@ function runReportAndUpdatePayment() {
       }
     }
     
-    // Update payment sheet with calculated amounts and adjust for bad IDs
-    updatePaymentSheetWithAmounts(ss, currentDate, rate, totalBadIds);
+    // Update payment sheet with calculated amounts based on good IDs
+    updatePaymentSheetWithAmounts(ss, currentDate, rate, goodIds);
     
     ss.toast('Report processing complete.', 'Success!', 5);
     
@@ -381,7 +393,7 @@ function runReportAndUpdatePayment() {
                           `Rate per ID: ${rate}\n` +
                           `Total Good IDs: ${totalGoodIds}\n` +
                           `Total Bad IDs: ${totalBadIds}\n` +
-                          `Payment sheet updated with calculated amounts.`;
+                          `Payment sheet updated with user-based calculations.`;
     
     ui.alert(successMessage);
     
@@ -390,7 +402,7 @@ function runReportAndUpdatePayment() {
   }
 }
 
-function updatePaymentSheetWithAmounts(ss, currentDate, rate, totalBadIds) {
+function updatePaymentSheetWithAmounts(ss, currentDate, rate, goodIds) {
   const paymentSheetName = `${currentDate} Payment`;
   const paymentSheet = ss.getSheetByName(paymentSheetName);
   
@@ -402,29 +414,88 @@ function updatePaymentSheetWithAmounts(ss, currentDate, rate, totalBadIds) {
   const dataRange = paymentSheet.getDataRange();
   const values = dataRange.getValues();
   
-  // Calculate amounts for each payment entry
-  for (let i = 1; i < values.length; i++) {
-    const totalId = parseInt(values[i][2]) || 0;
-    const amount = totalId * rate;
-    paymentSheet.getRange(i + 1, 4).setValue(amount); // Amount column
+  // Get submission data to map users to their submitted sheets
+  const submissionSheet = ss.getSheetByName(SUBMISSION_SHEET);
+  const submissionData = submissionSheet.getDataRange().getValues();
+  
+  // Create a map of user IDs to their submitted sheet URLs
+  const userSubmissions = {};
+  for (let i = 1; i < submissionData.length; i++) {
+    const userId = submissionData[i][4]; // User ID column
+    const sheetUrl = submissionData[i][0]; // Sheet Link column
+    if (!userSubmissions[userId]) {
+      userSubmissions[userId] = [];
+    }
+    userSubmissions[userId].push(sheetUrl);
   }
+  
+  // Calculate amounts for each payment entry based on good IDs
+  for (let i = 1; i < values.length; i++) {
+    const userId = values[i][4]; // User ID column
+    const totalSubmittedIds = parseInt(values[i][2]) || 0;
+    
+    // Count good IDs for this specific user from their submitted sheets
+    let goodIdCount = 0;
+    const userSheetUrls = userSubmissions[userId] || [];
+    
+    for (const sheetUrl of userSheetUrls) {
+      try {
+        const idMatch = sheetUrl.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        if (!idMatch) continue;
+        
+        const sourceId = idMatch[1];
+        const file = DriveApp.getFileById(sourceId);
+        const sourceSpreadsheet = SpreadsheetApp.open(file);
+        const sourceSheet = sourceSpreadsheet.getSheetByName(SOURCE_DATA_SHEET_NAME);
+        
+        if (sourceSheet) {
+          const data = sourceSheet.getDataRange().getValues();
+          if (data.length > 1) {
+            // Count good IDs from this user's sheet
+            for (let row = 1; row < data.length; row++) {
+              for (let col = 0; col < data[row].length; col++) {
+                const cellValue = String(data[row][col]).trim();
+                const numericValue = cellValue.replace(/\D/g, '');
+                
+                if (numericValue && goodIds.has(numericValue)) {
+                  goodIdCount++;
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.log(`Error processing sheet for user ${userId}: ${e.message}`);
+      }
+    }
+    
+    // Calculate amount based on good IDs only
+    const amount = goodIdCount * rate;
+    paymentSheet.getRange(i + 1, 4).setValue(amount); // Amount column
+    paymentSheet.getRange(i + 1, 6).setValue(goodIdCount); // Add Good IDs column
+  }
+  
+  // Add Good IDs column header
+  paymentSheet.getRange(1, 6).setValue('Good IDs');
+  paymentSheet.getRange(1, 6).setFontWeight('bold').setBackground('#4285f4').setFontColor('white');
   
   // Add summary row
   const lastRow = paymentSheet.getLastRow();
   paymentSheet.getRange(lastRow + 2, 1).setValue('SUMMARY');
   paymentSheet.getRange(lastRow + 2, 1).setFontWeight('bold');
   
-  const totalIds = values.slice(1).reduce((sum, row) => sum + (parseInt(row[2]) || 0), 0);
+  const totalSubmittedIds = values.slice(1).reduce((sum, row) => sum + (parseInt(row[2]) || 0), 0);
+  const totalGoodIds = values.slice(1).reduce((sum, row) => sum + (parseInt(row[5]) || 0), 0);
   const totalAmount = values.slice(1).reduce((sum, row) => sum + (parseFloat(row[3]) || 0), 0);
   
-  paymentSheet.getRange(lastRow + 3, 1).setValue('Total IDs:');
-  paymentSheet.getRange(lastRow + 3, 2).setValue(totalIds);
-  paymentSheet.getRange(lastRow + 4, 1).setValue('Total Amount:');
-  paymentSheet.getRange(lastRow + 4, 2).setValue(totalAmount);
-  paymentSheet.getRange(lastRow + 5, 1).setValue('Bad IDs Deducted:');
-  paymentSheet.getRange(lastRow + 5, 2).setValue(totalBadIds);
-  paymentSheet.getRange(lastRow + 6, 1).setValue('Final Amount:');
-  paymentSheet.getRange(lastRow + 6, 2).setValue(totalAmount - (totalBadIds * rate));
+  paymentSheet.getRange(lastRow + 3, 1).setValue('Total Submitted IDs:');
+  paymentSheet.getRange(lastRow + 3, 2).setValue(totalSubmittedIds);
+  paymentSheet.getRange(lastRow + 4, 1).setValue('Total Good IDs:');
+  paymentSheet.getRange(lastRow + 4, 2).setValue(totalGoodIds);
+  paymentSheet.getRange(lastRow + 5, 1).setValue('Rate per ID:');
+  paymentSheet.getRange(lastRow + 5, 2).setValue(rate);
+  paymentSheet.getRange(lastRow + 6, 1).setValue('Total Amount:');
+  paymentSheet.getRange(lastRow + 6, 2).setValue(totalAmount);
   
   // Format summary
   paymentSheet.getRange(lastRow + 2, 1, 5, 2).setFontWeight('bold');
