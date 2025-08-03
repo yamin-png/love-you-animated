@@ -41,6 +41,7 @@ function onOpen() {
     .createMenu('Automation Bot')
     .addItem('Merge All Submitted Sheets', 'runMergeProcess')
     .addItem('Run Report & Update Payment', 'runReportAndUpdatePayment')
+    .addItem('Check Good/Bad Status', 'checkGoodBadStatus')
     .addToUi();
 }
 
@@ -499,4 +500,112 @@ function updatePaymentSheetWithAmounts(ss, currentDate, rate, goodIds) {
   
   // Format summary
   paymentSheet.getRange(lastRow + 2, 1, 5, 2).setFontWeight('bold');
+}
+
+function checkGoodBadStatus() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Ask for report file URL
+  const reportPrompt = ui.prompt(
+    'Report File URL',
+    'Please enter the URL of the Report File to check the status of the merged data:',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (reportPrompt.getSelectedButton() !== ui.Button.OK || !reportPrompt.getResponseText()) {
+    ui.alert('Report URL input cancelled.');
+    return;
+  }
+
+  const reportUrl = reportPrompt.getResponseText();
+  const currentDate = getCurrentDate();
+  
+  try {
+    ss.toast('Running report... Please wait.', 'Reporting', -1);
+    
+    // Get report data
+    const reportIdMatch = reportUrl.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!reportIdMatch) { throw new Error("Invalid Report URL"); }
+    const reportId = reportIdMatch[1];
+    
+    const reportFile = DriveApp.getFileById(reportId);
+    const reportSpreadsheet = SpreadsheetApp.open(reportFile);
+    const reportSheet = reportSpreadsheet.getSheets()[0];
+    
+    // Get good IDs from report sheet (column A)
+    const reportData = reportSheet.getRange('A:A').getDisplayValues()
+        .flat()
+        .filter(String)
+        .map(item => item.replace(/\D/g, ''));
+    const goodList = new Set(reportData);
+    
+    // Process each merged sheet
+    const sheetTypes = ['0 FD', '30 FD'];
+    let totalBadIds = 0;
+    let totalGoodIds = 0;
+    
+    for (const type of sheetTypes) {
+      const sheetName = `${currentDate} ${type}`;
+      const mergedSheet = ss.getSheetByName(sheetName);
+      
+      if (mergedSheet) {
+        const dataRange = mergedSheet.getDataRange();
+        const values = dataRange.getValues();
+        
+        let badCount = 0;
+        let goodCount = 0;
+        
+        // Check each cell in the sheet
+        for (let i = 0; i < values.length; i++) {
+          for (let j = 0; j < values[i].length; j++) {
+            const cellValue = String(values[i][j]).trim();
+            const numericValue = cellValue.replace(/\D/g, '');
+            
+            if (numericValue) {
+              if (goodList.has(numericValue)) {
+                goodCount++;
+                // Color good cells green
+                mergedSheet.getRange(i + 1, j + 1).setBackground('#90EE90');
+              } else {
+                badCount++;
+                // Color bad cells red
+                mergedSheet.getRange(i + 1, j + 1).setBackground('#FFB6C1');
+              }
+            }
+          }
+        }
+        
+        totalGoodIds += goodCount;
+        totalBadIds += badCount;
+        
+        // Add status column
+        mergedSheet.getRange(1, values[0].length + 1).setValue('Status');
+        mergedSheet.getRange(1, values[0].length + 1).setFontWeight('bold');
+        
+        for (let i = 1; i < values.length; i++) {
+          const rowHasGoodId = values[i].some(cell => {
+            const numericValue = String(cell).replace(/\D/g, '');
+            return numericValue && goodList.has(numericValue);
+          });
+          
+          const status = rowHasGoodId ? 'Good' : 'Bad';
+          mergedSheet.getRange(i + 1, values[0].length + 1).setValue(status);
+        }
+      }
+    }
+    
+    ss.toast('Good/Bad check complete.', 'Success!', 5);
+    
+    const successMessage = `✅ Good/Bad check complete!\n\n` +
+                          `Total Good IDs: ${totalGoodIds}\n` +
+                          `Total Bad IDs: ${totalBadIds}\n` +
+                          `Cells have been colored (Green = Good, Red = Bad)\n` +
+                          `Status column added to each sheet.`;
+    
+    ui.alert(successMessage);
+    
+  } catch (e) {
+    ui.alert(`❌ Error checking good/bad status: ${e.message}`);
+  }
 }
